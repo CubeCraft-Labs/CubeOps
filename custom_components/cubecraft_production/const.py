@@ -45,5 +45,13 @@ EVENT_ORDER_PROCESSING = "order.processing"
 EVENT_ORDER_CHANGED = "order.changed"
 EVENT_ORDER_CANCELLED = "order.cancelled"
 EVENT_SHIPMENT_LABEL = "shipment.label_created"
-EVENTS = {EVENT_ORDER_PROCESSING, EVENT_ORDER_CHANGED, EVENT_ORDER_CANCELLED, EVENT_SHIPMENT_LABEL}
+# Operators advance work by hashtagging a WooCommerce order note (e.g. "#packed").
+EVENT_STAGE_REQUESTED = "order.stage_requested"
+EVENTS = {
+    EVENT_ORDER_PROCESSING,
+    EVENT_ORDER_CHANGED,
+    EVENT_ORDER_CANCELLED,
+    EVENT_SHIPMENT_LABEL,
+    EVENT_STAGE_REQUESTED,
+}
 ACCEPTANCE_KEYWORDS = ("accepted", "usps in possession", "acceptance", "picked up")

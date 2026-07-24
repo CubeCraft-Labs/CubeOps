@@ -27,6 +27,8 @@ from .const import (
     EVENT_ORDER_CHANGED,
     EVENT_ORDER_PROCESSING,
     EVENT_SHIPMENT_LABEL,
+    EVENT_STAGE_REQUESTED,
+    STAGES,
 )
 from .models import Order, Shipment, utcnow
 from .store import OrderStore
@@ -88,6 +90,9 @@ class ProductionCoordinator:
         if event_type == EVENT_ORDER_CANCELLED:
             await self._handle_cancelled(order_id, str(data.get("status", "cancelled")))
             return
+        if event_type == EVENT_STAGE_REQUESTED:
+            await self._apply_note_stage(order_id, str(payload.get("stage") or ""))
+            return
         if event_type == EVENT_SHIPMENT_LABEL:
             order = self.store.orders.get(order_id)
             if not order:
@@ -99,6 +104,34 @@ class ProductionCoordinator:
             await self.store.async_upsert(order)
             return
         raise ValueError(f"Unsupported bridge event type: {event_type}")
+
+    async def _apply_note_stage(self, order_id: int, stage: str) -> None:
+        """Advance an order because an operator hashtagged a WooCommerce note.
+
+        Runs inside the event lock, so it cannot delegate to async_set_stage
+        (asyncio.Lock is not reentrant) and inlines the same rules instead.
+        """
+        order = self.store.orders.get(order_id)
+        if not order:
+            return
+        if stage not in STAGES or stage == "done":
+            raise ValueError(f"Unsupported stage requested by note: {stage}")
+        if order.blocked:
+            return
+        if stage == "awaiting_usps" and not any(not shipment.refunded for shipment in order.shipments):
+            order.add_note("Cubecraft", f"Ignored #{stage} note: a purchased USPS label is required first")
+            await self.store.async_upsert(order)
+            return
+        if not order.can_move_to(stage):
+            return
+        order.move_to(stage, "WooCommerce note")
+        try:
+            await self.bridge.async_update_stage(order_id, stage, order.notes[-1]["message"])
+            self.bridge_connected = True
+        except BridgeError as err:
+            order.add_note("Cubecraft", f"Stage applied locally but WooCommerce sync failed: {err}")
+        await self.store.async_upsert(order)
+        self.hass.bus.async_fire(f"{DOMAIN}_stage_changed", {"order_id": order_id, "stage": stage})
 
     async def _handle_cancelled(self, order_id: int, status: str) -> None:
         order = self.store.orders.get(order_id)

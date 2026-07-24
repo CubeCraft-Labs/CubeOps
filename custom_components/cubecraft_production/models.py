@@ -63,7 +63,15 @@ class Order:
         self.updated_at = utcnow()
 
     def can_move_to(self, stage: str) -> bool:
-        return not self.blocked and stage in USER_STAGE_TRANSITIONS.get(self.stage, set())
+        """Any forward move through the manual stages is allowed.
+
+        Steps get combined or skipped in a small shop, so a jump straight to a
+        later stage is legitimate. Backwards moves and 'done' are not: only USPS
+        acceptance completes an order.
+        """
+        if self.blocked or stage not in STAGES or stage == "done":
+            return False
+        return STAGES.index(stage) > STAGES.index(self.stage)
 
     def all_active_shipments_accepted(self) -> bool:
         active = [shipment for shipment in self.shipments if not shipment.refunded]

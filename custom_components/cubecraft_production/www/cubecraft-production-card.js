@@ -11,7 +11,15 @@ class CubecraftProductionCard extends HTMLElement {
     if (!this._requested) this._load();
   }
 
-  connectedCallback() { ensureBrandFont(); this._render(); }
+  connectedCallback() {
+    ensureBrandFont();
+    this._render();
+    // Stages advance from WooCommerce notes, so nothing here triggers a reload.
+    // Poll instead, so a display left open keeps up on its own.
+    this._timer = setInterval(() => { this._requested = false; this._load(); }, REFRESH_MS);
+  }
+
+  disconnectedCallback() { clearInterval(this._timer); }
   getCardSize() { return 12; }
 
   async _load() {
@@ -121,45 +129,25 @@ class CubecraftProductionCard extends HTMLElement {
       <div class="shell"><div class="title"><span>${escapeHtml(this.config.title)}</span><button class="secondary" id="refresh">Refresh</button></div>
       ${this.error ? `<p class="error">${escapeHtml(this.error)}</p>` : ""}<main class="board">${orderColumns}</main></div>`;
     this.shadowRoot.getElementById("refresh")?.addEventListener("click", () => { this._requested = false; this.error = null; this._load(); });
-    this.shadowRoot.querySelectorAll("[data-action]").forEach(button => button.addEventListener("click", event => this._action(event.currentTarget)));
   }
 
   _order(order) {
     const name = this.config.show_pii ? [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(" ") : "Packing details restricted";
     const address = this.config.show_pii ? [order.customer?.address_1, order.customer?.address_2, [order.customer?.city, order.customer?.state, order.customer?.postcode].filter(Boolean).join(" ")].filter(Boolean).join(" · ") : "";
     const items = asList(order.items).map(item => `${item.quantity || 1}× ${escapeHtml(item.name || item.product_name || "Item")}`).join("<br>");
-    const next = { queued:"printing", printing:"qa_assembly", qa_assembly:"packed", packed:"awaiting_usps" }[order.stage];
-    const action = next && !order.blocked ? `<button data-action="advance" data-id="${order.order_id}" data-stage="${next}">Advance</button>` : "";
-    const claim = !order.assigned_to && !order.blocked ? `<button class="secondary" data-action="claim" data-id="${order.order_id}">Claim</button>` : order.assigned_to ? `<button class="secondary" data-action="release" data-id="${order.order_id}">Release</button>` : "";
-    const resolve = order.blocked ? `<button data-action="resolve" data-id="${order.order_id}">Resolve</button>` : "";
-    const addNote = `<button class="secondary" data-action="note" data-id="${order.order_id}">Note</button>`;
     const link = order.order_url ? `<a href="${escapeAttribute(order.order_url)}" target="_blank" rel="noopener">Open Woo</a>` : "";
     const tracking = (order.shipments || []).map(s => `${s.tracking_number}: ${s.accepted_at ? "Accepted" : s.status}`).join(" · ");
     const note = order.customer_note ? `<div class="subtle">Customer note: ${escapeHtml(order.customer_note)}</div>` : "";
-    return `<article class="${order.blocked ? "blocked" : ""}"><div class="order-head"><span>#${escapeHtml(order.order_number)}</span><span>${escapeHtml(order.assigned_to || "Unclaimed")}</span></div><div class="items">${items}</div><div class="subtle">${escapeHtml(name)}${address ? `<br>${escapeHtml(address)}` : ""}${order.shipping_method ? `<br>${escapeHtml(order.shipping_method)}` : ""}${tracking ? `<br>${escapeHtml(tracking)}` : ""}</div>${note}${order.exception ? `<div class="exception">${escapeHtml(order.exception)}</div>` : ""}<div class="actions">${claim}${action}${addNote}${resolve}${link}</div></article>`;
+    const owner = order.assigned_to ? `<span>${escapeHtml(order.assigned_to)}</span>` : "";
+    return `<article class="${order.blocked ? "blocked" : ""}"><div class="order-head"><span>#${escapeHtml(order.order_number)}</span>${owner}</div><div class="items">${items}</div><div class="subtle">${escapeHtml(name)}${address ? `<br>${escapeHtml(address)}` : ""}${order.shipping_method ? `<br>${escapeHtml(order.shipping_method)}` : ""}${tracking ? `<br>${escapeHtml(tracking)}` : ""}</div>${note}${order.exception ? `<div class="exception">${escapeHtml(order.exception)}</div>` : ""}${link ? `<div class="actions">${link}</div>` : ""}</article>`;
   }
 
-  async _action(button) {
-    const id = Number(button.dataset.id);
-    const action = button.dataset.action;
-    try {
-      if (action === "advance") await this._hass.callService("cubecraft_production", "set_stage", { order_id: id, stage: button.dataset.stage, entry_id: this.config.entry_id || undefined });
-      if (action === "claim") await this._hass.callService("cubecraft_production", "claim", { order_id: id, entry_id: this.config.entry_id || undefined });
-      if (action === "release") await this._hass.callService("cubecraft_production", "release", { order_id: id, entry_id: this.config.entry_id || undefined });
-      if (action === "resolve") await this._hass.callService("cubecraft_production", "resolve_exception", { order_id: id, entry_id: this.config.entry_id || undefined, note: "Resolved from production workboard" });
-      if (action === "note") {
-        const message = window.prompt("Internal production note");
-        if (!message) return;
-        await this._hass.callService("cubecraft_production", "add_note", { order_id: id, entry_id: this.config.entry_id || undefined, message });
-      }
-      this._requested = false; await this._load();
-    } catch (error) { this.error = error.message || String(error); this._render(); }
-  }
 }
 
 // @font-face is ignored inside a shadow root, so the brand font has to be
 // declared once in the document itself. Served by the integration alongside
 // the card; falls back to system-ui if unavailable.
+const REFRESH_MS = 30000;
 const FONT_STYLE_ID = "cubecraft-production-font";
 function ensureBrandFont() {
   if (document.getElementById(FONT_STYLE_ID)) return;
