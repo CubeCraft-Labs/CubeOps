@@ -66,7 +66,7 @@ class CubecraftProductionCard extends HTMLElement {
   _order(order) {
     const name = this.config.show_pii ? [order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(" ") : "Packing details restricted";
     const address = this.config.show_pii ? [order.customer?.address_1, order.customer?.address_2, [order.customer?.city, order.customer?.state, order.customer?.postcode].filter(Boolean).join(" ")].filter(Boolean).join(" · ") : "";
-    const items = (order.items || []).map(item => `${item.quantity || 1}× ${escapeHtml(item.name || item.product_name || "Item")}`).join("<br>");
+    const items = asList(order.items).map(item => `${item.quantity || 1}× ${escapeHtml(item.name || item.product_name || "Item")}`).join("<br>");
     const next = { queued:"printing", printing:"qa_assembly", qa_assembly:"packed", packed:"awaiting_usps" }[order.stage];
     const action = next && !order.blocked ? `<button data-action="advance" data-id="${order.order_id}" data-stage="${next}">Advance</button>` : "";
     const claim = !order.assigned_to && !order.blocked ? `<button class="secondary" data-action="claim" data-id="${order.order_id}">Claim</button>` : order.assigned_to ? `<button class="secondary" data-action="release" data-id="${order.order_id}">Release</button>` : "";
@@ -96,6 +96,9 @@ class CubecraftProductionCard extends HTMLElement {
   }
 }
 
+// Line items may arrive as an array or, from bridges that keep WooCommerce's
+// item-ID keys, as an object. Normalize so .map is always safe.
+function asList(value) { return Array.isArray(value) ? value : value && typeof value === "object" ? Object.values(value) : []; }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function escapeAttribute(value) { return escapeHtml(value).replace(/`/g, "&#96;"); }
 customElements.define("cubecraft-production-card", CubecraftProductionCard);

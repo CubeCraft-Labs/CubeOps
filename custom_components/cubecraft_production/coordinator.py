@@ -120,7 +120,7 @@ class ProductionCoordinator:
             order_number=str(data.get("number", data["id"])),
             created_at=data.get("date_created_gmt") or data.get("created_at") or utcnow(),
             customer=data.get("shipping") or {},
-            items=data.get("line_items") or data.get("items") or [],
+            items=_line_items(data),
             shipping_method=data.get("shipping_method") or _shipping_method(data),
             customer_note=data.get("customer_note"),
             order_url=data.get("admin_url"),
@@ -129,7 +129,7 @@ class ProductionCoordinator:
 
     def _merge_order(self, order: Order, data: dict[str, Any]) -> None:
         order.customer = data.get("shipping") or order.customer
-        order.items = data.get("line_items") or data.get("items") or order.items
+        order.items = _line_items(data) or order.items
         order.shipping_method = data.get("shipping_method") or _shipping_method(data) or order.shipping_method
         order.customer_note = data.get("customer_note", order.customer_note)
         order.order_url = data.get("admin_url", order.order_url)
@@ -318,6 +318,18 @@ class ProductionCoordinator:
             return
         domain, name = service.split(".", 1)
         await self.hass.services.async_call(domain, name, {"title": title, "message": message}, blocking=False)
+
+
+def _line_items(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize line items to a list.
+
+    WooCommerce keys order items by item ID, so a bridge that serializes them
+    without reindexing sends a JSON object rather than an array. Accept both.
+    """
+    items = data.get("line_items") or data.get("items") or []
+    if isinstance(items, dict):
+        return [item for item in items.values() if isinstance(item, dict)]
+    return [item for item in items if isinstance(item, dict)]
 
 
 def _shipping_method(data: dict[str, Any]) -> str | None:
