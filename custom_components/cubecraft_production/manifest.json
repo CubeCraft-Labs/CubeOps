@@ -1,0 +1,11 @@
+{
+  "domain": "cubecraft_production",
+  "name": "Cubecraft Production",
+  "codeowners": ["@cubecraft"],
+  "config_flow": true,
+  "dependencies": ["frontend", "http", "webhook", "websocket_api"],
+  "documentation": "https://code.cubecraftlabs.com/CubeCraftLabs/CubeOps",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://code.cubecraftlabs.com/CubeCraftLabs/CubeOps/issues",
+  "version": "1.0.1"
+}

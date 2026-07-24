@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Cubecraft Production",
+        "description": "Connect Home Assistant to the Cubecraft Production Bridge.",
+        "data": {
+          "bridge_url": "WordPress bridge URL",
+          "shared_secret": "Bridge shared secret",
+          "usps_client_id": "USPS client ID",
+          "usps_client_secret": "USPS client secret"
+        }
+      }
+    },
+    "error": { "weak_secret": "Use a shared secret of at least 32 characters." }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Cubecraft Production options",
+        "data": {
+          "notify_service": "Notification service",
+          "poll_minutes": "USPS polling interval (minutes)",
+          "escalation_hours": "USPS escalation threshold (hours)",
+          "usps_tracking_url": "USPS tracking URL template"
+        }
+      }
+    }
+  }
+}

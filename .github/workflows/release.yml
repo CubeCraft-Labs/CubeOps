@@ -1,0 +1,24 @@
+name: HACS Release
+
+# Runs on the GitHub mirror. When a `v*` tag arrives (pushed by the Gitea
+# release-deploy workflow and carried over by the push-mirror), cut a GitHub
+# Release so HACS surfaces the new version to Home Assistant users.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

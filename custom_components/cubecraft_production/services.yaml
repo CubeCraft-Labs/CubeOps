@@ -1,0 +1,29 @@
+claim:
+  name: Claim order
+  description: Claim a shared production order for the calling user.
+  fields:
+    order_id:
+      required: true
+      selector: {number: {min: 1, mode: box}}
+release:
+  name: Release order
+  description: Release a claimed production order.
+set_stage:
+  name: Set production stage
+  description: Advance an order through the manual production stages.
+  fields:
+    order_id: {required: true, selector: {number: {min: 1, mode: box}}}
+    stage: {required: true, selector: {select: {options: [printing, qa_assembly, packed, awaiting_usps]}}}
+    note: {selector: {text: {multiline: true}}}
+add_note:
+  name: Add internal note
+  description: Add a Cubecraft internal note and mirror it to WooCommerce.
+resolve_exception:
+  name: Resolve exception
+  description: Clear an exception after an operator decision.
+reconcile:
+  name: Reconcile bridge
+  description: Fetch bridge orders and repair missed events.
+poll_usps:
+  name: Poll USPS now
+  description: Check all active USPS shipments immediately.
