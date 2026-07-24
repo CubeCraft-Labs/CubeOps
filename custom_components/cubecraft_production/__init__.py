@@ -29,15 +29,21 @@ class RuntimeData:
 
 type CubecraftConfigEntry = Any
 
-CARD_URL = f"/{DOMAIN}/cubecraft-production-card.js"
+STATIC_URL = f"/{DOMAIN}"
+CARD_URL = f"{STATIC_URL}/cubecraft-production-card.js"
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
-    """Serve and auto-load the bundled workboard card once per Home Assistant."""
+    """Serve and auto-load the bundled workboard card once per Home Assistant.
+
+    The whole www directory is served so the card can also load its bundled
+    Nunito font. Caching stays off so an updated card is picked up on reload
+    rather than needing a hard refresh.
+    """
     if hass.data.get(f"{DOMAIN}_frontend"):
         return
-    card = Path(__file__).parent / "www" / "cubecraft-production-card.js"
-    await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(card), False)])
+    www = Path(__file__).parent / "www"
+    await hass.http.async_register_static_paths([StaticPathConfig(STATIC_URL, str(www), False)])
     add_extra_js_url(hass, CARD_URL)
     hass.data[f"{DOMAIN}_frontend"] = True
 
@@ -78,8 +84,9 @@ def _coordinator(hass: HomeAssistant, call: ServiceCall) -> ProductionCoordinato
     return next(iter(entries.values()))
 
 
-def _author(hass: HomeAssistant, call: ServiceCall) -> str:
-    if call.context.user_id and (user := hass.auth.async_get_user(call.context.user_id)):
+async def _author(hass: HomeAssistant, call: ServiceCall) -> str:
+    """Resolve the calling user's display name. async_get_user is a coroutine."""
+    if call.context.user_id and (user := await hass.auth.async_get_user(call.context.user_id)):
         return user.name or user.id
     return "Home Assistant"
 
@@ -90,19 +97,19 @@ def _async_register_services(hass: HomeAssistant) -> None:
     base = {vol.Required("order_id"): vol.Coerce(int), vol.Optional("entry_id"): str}
 
     async def claim(call: ServiceCall) -> None:
-        await _coordinator(hass, call).async_claim(call.data["order_id"], _author(hass, call))
+        await _coordinator(hass, call).async_claim(call.data["order_id"], await _author(hass, call))
 
     async def release(call: ServiceCall) -> None:
-        await _coordinator(hass, call).async_release(call.data["order_id"], _author(hass, call))
+        await _coordinator(hass, call).async_release(call.data["order_id"], await _author(hass, call))
 
     async def set_stage(call: ServiceCall) -> None:
-        await _coordinator(hass, call).async_set_stage(call.data["order_id"], call.data["stage"], _author(hass, call), call.data.get("note"))
+        await _coordinator(hass, call).async_set_stage(call.data["order_id"], call.data["stage"], await _author(hass, call), call.data.get("note"))
 
     async def add_note(call: ServiceCall) -> None:
-        await _coordinator(hass, call).async_add_note(call.data["order_id"], _author(hass, call), call.data["message"])
+        await _coordinator(hass, call).async_add_note(call.data["order_id"], await _author(hass, call), call.data["message"])
 
     async def resolve(call: ServiceCall) -> None:
-        await _coordinator(hass, call).async_resolve_exception(call.data["order_id"], _author(hass, call), call.data.get("note", ""))
+        await _coordinator(hass, call).async_resolve_exception(call.data["order_id"], await _author(hass, call), call.data.get("note", ""))
 
     async def reconcile(call: ServiceCall) -> None:
         await _coordinator(hass, call).async_reconcile()
