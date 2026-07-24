@@ -18,6 +18,12 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # `brands` requires the domain to be registered in home-assistant/brands,
+          # which only applies to integrations submitted to the HACS default store.
+          # This one is installed as a custom repository, so the check never passes
+          # and carries no signal. Everything else (structure, hacs.json, repo
+          # metadata) is still enforced.
+          ignore: brands
 
   hassfest:
     runs-on: ubuntu-latest
