@@ -17,9 +17,11 @@ from .const import (
     CONF_SHARED_SECRET,
     CONF_USPS_CLIENT_ID,
     CONF_USPS_CLIENT_SECRET,
+    CONF_USPS_TOKEN_URL,
     CONF_USPS_TRACKING_URL,
     DEFAULT_ESCALATION_HOURS,
     DEFAULT_POLL_MINUTES,
+    DEFAULT_USPS_TOKEN_URL,
     DEFAULT_USPS_TRACKING_URL,
     DOMAIN,
 )
@@ -35,6 +37,7 @@ OPTIONS_SCHEMA = vol.Schema({
     vol.Required(CONF_POLL_MINUTES, default=DEFAULT_POLL_MINUTES): vol.All(vol.Coerce(int), vol.Range(min=5, max=1440)),
     vol.Required(CONF_ESCALATION_HOURS, default=DEFAULT_ESCALATION_HOURS): vol.All(vol.Coerce(int), vol.Range(min=1, max=720)),
     vol.Required(CONF_USPS_TRACKING_URL, default=DEFAULT_USPS_TRACKING_URL): str,
+    vol.Required(CONF_USPS_TOKEN_URL, default=DEFAULT_USPS_TOKEN_URL): str,
 })
 
 
@@ -54,6 +57,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_POLL_MINUTES: DEFAULT_POLL_MINUTES,
                     CONF_ESCALATION_HOURS: DEFAULT_ESCALATION_HOURS,
                     CONF_USPS_TRACKING_URL: DEFAULT_USPS_TRACKING_URL,
+                    CONF_USPS_TOKEN_URL: DEFAULT_USPS_TOKEN_URL,
                 })
         return self.async_show_form(step_id="user", data_schema=DATA_SCHEMA, errors=errors)
 
@@ -73,6 +77,7 @@ class OptionsFlow(OptionsFlowWithReload):
             CONF_POLL_MINUTES: DEFAULT_POLL_MINUTES,
             CONF_ESCALATION_HOURS: DEFAULT_ESCALATION_HOURS,
             CONF_USPS_TRACKING_URL: DEFAULT_USPS_TRACKING_URL,
+            CONF_USPS_TOKEN_URL: DEFAULT_USPS_TOKEN_URL,
         }, **self.config_entry.options}
         return self.async_show_form(
             step_id="init",

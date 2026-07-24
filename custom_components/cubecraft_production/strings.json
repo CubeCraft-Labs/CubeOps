@@ -22,7 +22,8 @@
           "notify_service": "Notification service",
           "poll_minutes": "USPS polling interval (minutes)",
           "escalation_hours": "USPS escalation threshold (hours)",
-          "usps_tracking_url": "USPS tracking URL template"
+          "usps_tracking_url": "USPS tracking URL template",
+          "usps_token_url": "USPS OAuth token URL"
         }
       }
     }

@@ -16,10 +16,13 @@ CONF_NOTIFY_SERVICE = "notify_service"
 CONF_POLL_MINUTES = "poll_minutes"
 CONF_ESCALATION_HOURS = "escalation_hours"
 CONF_USPS_TRACKING_URL = "usps_tracking_url"
+CONF_USPS_TOKEN_URL = "usps_token_url"
 
 DEFAULT_POLL_MINUTES = 30
 DEFAULT_ESCALATION_HOURS = 24
-DEFAULT_USPS_TRACKING_URL = "https://api.usps.com/tracking/v3/tracking/{tracking_number}"
+# USPS's OAuth2 platform is apis.usps.com (production) / apis-tem.usps.com (testing).
+DEFAULT_USPS_TRACKING_URL = "https://apis.usps.com/tracking/v3/tracking/{tracking_number}"
+DEFAULT_USPS_TOKEN_URL = "https://apis.usps.com/oauth2/v3/token"
 
 STAGES = ("queued", "printing", "qa_assembly", "packed", "awaiting_usps", "done")
 ACTIVE_STAGES = STAGES[:-1]

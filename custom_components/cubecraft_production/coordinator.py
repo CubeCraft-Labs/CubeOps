@@ -17,8 +17,10 @@ from .const import (
     CONF_NOTIFY_SERVICE,
     CONF_USPS_CLIENT_ID,
     CONF_USPS_CLIENT_SECRET,
+    CONF_USPS_TOKEN_URL,
     CONF_USPS_TRACKING_URL,
     DEFAULT_ESCALATION_HOURS,
+    DEFAULT_USPS_TOKEN_URL,
     DEFAULT_USPS_TRACKING_URL,
     DOMAIN,
     EVENT_ORDER_CANCELLED,
@@ -297,8 +299,9 @@ class ProductionCoordinator:
         if self._usps_token and self._usps_token_expires > datetime.now(timezone.utc) + timedelta(minutes=1):
             return self._usps_token
         values = self.entry.data
+        token_url = self.entry.options.get(CONF_USPS_TOKEN_URL, DEFAULT_USPS_TOKEN_URL)
         async with async_get_clientsession(self.hass).post(
-            "https://api.usps.com/oauth2/v3/token",
+            token_url,
             data={"grant_type": "client_credentials", "client_id": values[CONF_USPS_CLIENT_ID], "client_secret": values[CONF_USPS_CLIENT_SECRET]},
             timeout=20,
         ) as response:
