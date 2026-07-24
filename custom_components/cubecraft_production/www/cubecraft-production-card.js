@@ -22,6 +22,12 @@ class CubecraftProductionCard extends HTMLElement {
   disconnectedCallback() { clearInterval(this._timer); }
   getCardSize() { return 12; }
 
+  // Sections view: default to the full section width but stay resizable, and
+  // let the height follow the content instead of being fixed.
+  getGridOptions() {
+    return { columns: "full", min_columns: 6, rows: "auto", min_rows: 2 };
+  }
+
   async _load() {
     if (!this._hass || this._loading) return;
     this._loading = true;
@@ -81,8 +87,17 @@ class CubecraftProductionCard extends HTMLElement {
           padding:16px 20px; background:var(--cc-gradient); color:#fff;
           font-size:1.25rem; font-weight:800; letter-spacing:-.01em;
         }
-        .board { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(268px, 1fr); overflow-x:auto; gap:12px; padding:16px; }
-        .column { background:var(--cc-surface-sunken); border-radius:var(--cc-radius-lg); min-height:280px; }
+        /* Columns wrap to fit whatever width the card is given, rather than
+           scrolling off the edge. min() keeps a single column from overflowing
+           a very narrow card. */
+        .board {
+          display:grid;
+          grid-template-columns:repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+          align-items:start; gap:12px; padding:16px;
+        }
+        /* Sized to content: a tall min-height wastes a lot of space once the
+           columns wrap and stack on a narrow card. */
+        .column { background:var(--cc-surface-sunken); border-radius:var(--cc-radius-lg); min-height:96px; }
         .column header {
           display:flex; justify-content:space-between; align-items:center; gap:8px;
           padding:12px 12px 8px; position:sticky; left:0;
@@ -160,7 +175,17 @@ function ensureBrandFont() {
 // Line items may arrive as an array or, from bridges that keep WooCommerce's
 // item-ID keys, as an object. Normalize so .map is always safe.
 function asList(value) { return Array.isArray(value) ? value : value && typeof value === "object" ? Object.values(value) : []; }
-function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
+// WooCommerce stores text HTML-encoded ("Ground Advantage&#8482;"). Decode before
+// escaping, or the ampersand gets escaped again and the entity renders literally.
+// A detached textarea decodes entities without parsing markup, so this stays safe.
+function decodeEntities(value) {
+  const text = String(value ?? "");
+  if (!text.includes("&")) return text;
+  const el = document.createElement("textarea");
+  el.innerHTML = text;
+  return el.value;
+}
+function escapeHtml(value) { return decodeEntities(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function escapeAttribute(value) { return escapeHtml(value).replace(/`/g, "&#96;"); }
 customElements.define("cubecraft-production-card", CubecraftProductionCard);
 window.customCards = window.customCards || [];
