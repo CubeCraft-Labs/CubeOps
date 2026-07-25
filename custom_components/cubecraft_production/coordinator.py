@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -34,7 +35,10 @@ from .models import Order, Shipment, utcnow
 from .store import OrderStore
 from .usps import _is_accepted, _tracking_status
 
+_LOGGER = logging.getLogger(__name__)
+
 SIGNAL_UPDATED = f"{DOMAIN}_updated"
+SYNC_FAILURE = "WooCommerce sync failed"
 
 
 class ProductionCoordinator:
@@ -113,23 +117,40 @@ class ProductionCoordinator:
         """
         order = self.store.orders.get(order_id)
         if not order:
+            _LOGGER.debug("Note requested stage %s for unknown order %s", stage, order_id)
             return
         if stage not in STAGES or stage == "done":
             raise ValueError(f"Unsupported stage requested by note: {stage}")
         if order.blocked:
+            _LOGGER.info(
+                "Ignoring #%s on order %s: the order is blocked (%s)", stage, order_id, order.exception,
+            )
             return
         if stage == "awaiting_usps" and not any(not shipment.refunded for shipment in order.shipments):
             order.add_note("Cubecraft", f"Ignored #{stage} note: a purchased USPS label is required first")
             await self.store.async_upsert(order)
             return
         if not order.can_move_to(stage):
+            _LOGGER.info(
+                "Ignoring #%s on order %s: it is already at %s (stages only move forward)",
+                stage, order_id, order.stage,
+            )
             return
         order.move_to(stage, "WooCommerce note")
         try:
             await self.bridge.async_update_stage(order_id, stage, order.notes[-1]["message"])
             self.bridge_connected = True
+            if order.exception and order.exception.startswith(SYNC_FAILURE):
+                order.exception = None
         except BridgeError as err:
-            order.add_note("Cubecraft", f"Stage applied locally but WooCommerce sync failed: {err}")
+            # Diverging beats losing the operator's action, but it must be loud:
+            # log it and surface it on the card rather than burying it in a note.
+            _LOGGER.warning(
+                "Order %s advanced to %s in Home Assistant but the WooCommerce sync failed: %s",
+                order_id, stage, err,
+            )
+            order.exception = f"{SYNC_FAILURE}: {err}"
+            order.add_note("Cubecraft", order.exception)
         await self.store.async_upsert(order)
         self.hass.bus.async_fire(f"{DOMAIN}_stage_changed", {"order_id": order_id, "stage": stage})
 
@@ -203,6 +224,7 @@ class ProductionCoordinator:
                 await self.bridge.async_update_stage(order_id, stage, order.notes[-1]["message"])
                 self.bridge_connected = True
             except BridgeError as err:
+                _LOGGER.warning("Stage sync to WooCommerce failed for order %s: %s", order_id, err)
                 order.blocked = True
                 order.exception = f"WooCommerce stage sync failed: {err}"
                 order.add_note("Cubecraft", order.exception)
@@ -242,6 +264,7 @@ class ProductionCoordinator:
                 await self.bridge.async_update_stage(order_id, order.stage, message)
                 self.bridge_connected = True
             except BridgeError as err:
+                _LOGGER.warning("Note sync to WooCommerce failed for order %s: %s", order_id, err)
                 order.blocked = True
                 order.exception = f"WooCommerce note sync failed: {err}"
                 order.add_note("Cubecraft", order.exception)
@@ -278,6 +301,10 @@ class ProductionCoordinator:
                     try:
                         status = await self._async_track_usps(shipment.tracking_number)
                     except (BridgeError, aiohttp.ClientError) as err:
+                        _LOGGER.warning(
+                            "USPS tracking lookup failed for %s on order %s: %s",
+                            shipment.tracking_number, order.order_id, err,
+                        )
                         order.exception = f"USPS tracking unavailable: {err}"
                         continue
                     shipment.status = status
@@ -294,6 +321,10 @@ class ProductionCoordinator:
                         await self.async_notify("Order shipped", f"Order #{order.order_number} is now complete.")
                         self.hass.bus.async_fire(f"{DOMAIN}_order_shipped", {"order_id": order.order_id, "order_number": order.order_number})
                     except BridgeError as err:
+                        _LOGGER.error(
+                            "Order %s is fully accepted by USPS but completing it in WooCommerce failed: %s",
+                            order.order_id, err,
+                        )
                         order.blocked = True
                         order.exception = f"WooCommerce completion sync failed: {err}"
                     changed = True

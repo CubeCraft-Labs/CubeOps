@@ -121,6 +121,19 @@ class CubecraftProductionCard extends HTMLElement {
         .items { margin:8px 0; font-size:.875rem; line-height:1.5; }
         .subtle { margin:8px 0; font-size:.8125rem; line-height:1.5; color:var(--cc-text-muted); }
         .exception { color:var(--cc-error); font-size:.75rem; font-weight:600; margin:8px 0; }
+        .trail { margin:8px 0 0; font-size:.75rem; }
+        .trail summary {
+          cursor:pointer; color:var(--cc-text-muted); font-weight:700;
+          letter-spacing:.02em; list-style:none; padding:2px 0;
+        }
+        .trail summary::-webkit-details-marker { display:none; }
+        .trail summary::before { content:"▸ "; display:inline-block; transition:transform var(--cc-dur) var(--cc-ease); }
+        .trail[open] summary::before { transform:rotate(90deg); }
+        .trail .note {
+          display:grid; gap:1px; padding:6px 0; border-top:1px solid var(--cc-border);
+          color:var(--cc-text); line-height:1.45;
+        }
+        .trail .note span { color:var(--cc-text-muted); font-size:.6875rem; }
         .actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
         button, .actions a {
           display:inline-flex; align-items:center; justify-content:center;
@@ -154,7 +167,12 @@ class CubecraftProductionCard extends HTMLElement {
     const tracking = (order.shipments || []).map(s => `${s.tracking_number}: ${s.accepted_at ? "Accepted" : s.status}`).join(" · ");
     const note = order.customer_note ? `<div class="subtle">Customer note: ${escapeHtml(order.customer_note)}</div>` : "";
     const owner = order.assigned_to ? `<span>${escapeHtml(order.assigned_to)}</span>` : "";
-    return `<article class="${order.blocked ? "blocked" : ""}"><div class="order-head"><span>#${escapeHtml(order.order_number)}</span>${owner}</div><div class="items">${items}</div><div class="subtle">${escapeHtml(name)}${address ? `<br>${escapeHtml(address)}` : ""}${order.shipping_method ? `<br>${escapeHtml(order.shipping_method)}` : ""}${tracking ? `<br>${escapeHtml(tracking)}` : ""}</div>${note}${order.exception ? `<div class="exception">${escapeHtml(order.exception)}</div>` : ""}${link ? `<div class="actions">${link}</div>` : ""}</article>`;
+    // The hashtag workflow builds an audit trail; show it, collapsed, newest first.
+    const trail = asList(order.notes).slice(-NOTE_LIMIT).reverse();
+    const notes = trail.length ? `<details class="trail"><summary>History (${asList(order.notes).length})</summary>${
+      trail.map(entry => `<div class="note"><span>${escapeHtml(shortTime(entry.at))} · ${escapeHtml(entry.author)}</span>${escapeHtml(entry.message)}</div>`).join("")
+    }</details>` : "";
+    return `<article class="${order.blocked ? "blocked" : ""}"><div class="order-head"><span>#${escapeHtml(order.order_number)}</span>${owner}</div><div class="items">${items}</div><div class="subtle">${escapeHtml(name)}${address ? `<br>${escapeHtml(address)}` : ""}${order.shipping_method ? `<br>${escapeHtml(order.shipping_method)}` : ""}${tracking ? `<br>${escapeHtml(tracking)}` : ""}</div>${note}${order.exception ? `<div class="exception">${escapeHtml(order.exception)}</div>` : ""}${notes}${link ? `<div class="actions">${link}</div>` : ""}</article>`;
   }
 
 }
@@ -163,6 +181,7 @@ class CubecraftProductionCard extends HTMLElement {
 // declared once in the document itself. Served by the integration alongside
 // the card; falls back to system-ui if unavailable.
 const REFRESH_MS = 30000;
+const NOTE_LIMIT = 6;
 const FONT_STYLE_ID = "cubecraft-production-font";
 function ensureBrandFont() {
   if (document.getElementById(FONT_STYLE_ID)) return;
@@ -178,6 +197,12 @@ function asList(value) { return Array.isArray(value) ? value : value && typeof v
 // WooCommerce stores text HTML-encoded ("Ground Advantage&#8482;"). Decode before
 // escaping, or the ampersand gets escaped again and the entity renders literally.
 // A detached textarea decodes entities without parsing markup, so this stays safe.
+// Compact timestamp for the history trail; falls back to the raw value.
+function shortTime(value) {
+  const at = new Date(value);
+  if (isNaN(at)) return String(value ?? "");
+  return at.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
 function decodeEntities(value) {
   const text = String(value ?? "");
   if (!text.includes("&")) return text;
