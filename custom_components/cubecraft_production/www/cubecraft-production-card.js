@@ -1,8 +1,8 @@
 class CubecraftProductionCard extends HTMLElement {
-  static getStubConfig() { return { title: "Cubecraft Production", show_pii: true }; }
+  static getStubConfig() { return { title: "Cubecraft Production", show_pii: true, kiosk: false }; }
   setConfig(config) {
     if (!config) throw new Error("A configuration is required");
-    this.config = { title: "Cubecraft Production", show_pii: true, ...config };
+    this.config = { title: "Cubecraft Production", show_pii: true, kiosk: false, hide_done: false, ...config };
     this._render();
   }
 
@@ -46,7 +46,9 @@ class CubecraftProductionCard extends HTMLElement {
   _render() {
     if (!this.config) return;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    const stages = [["queued", "Queued"], ["printing", "Printing"], ["qa_assembly", "QA / assembly"], ["packed", "Packed"], ["awaiting_usps", "Awaiting USPS"], ["done", "Done"]];
+    const kiosk = !!this.config.kiosk;
+    const stages = [["queued", "Queued"], ["printing", "Printing"], ["qa_assembly", "QA / assembly"], ["packed", "Packed"], ["awaiting_usps", "Awaiting USPS"], ["done", "Done"]]
+      .filter(([key]) => !(this.config.hide_done && key === "done"));
     const orderColumns = stages.map(([key, label]) => {
       const cards = (this.orders || []).filter(order => order.stage === key).sort((a, b) => a.created_at.localeCompare(b.created_at)).map(order => this._order(order)).join("");
       return `<section class="column"><header>${label}<span>${(this.orders || []).filter(o => o.stage === key).length}</span></header><div class="stack">${cards || "<p class='empty'>No orders</p>"}</div></section>`;
@@ -151,10 +153,29 @@ class CubecraftProductionCard extends HTMLElement {
           box-shadow:none; border:1px solid var(--cc-border);
         }
         .title button.secondary { background:rgba(255,255,255,.18); color:#fff; border-color:rgba(255,255,255,.35); }
+        /* Kiosk: a 1080p panel read from across the room. Scale type and
+           spacing up, and drop hover affordances nothing will ever hover. */
+        /* Fill the panel: header on top, board taking the rest, columns of equal
+           height — the usual wall-mounted kanban shape rather than a short card
+           floating in empty space. */
+        .shell.kiosk { border-radius:0; box-shadow:none; min-height:100vh; display:flex; flex-direction:column; }
+        .shell.kiosk .board { flex:1; align-items:stretch; }
+        .shell.kiosk .title { padding:20px 28px; font-size:1.75rem; }
+        .shell.kiosk .board { gap:16px; padding:20px; grid-template-columns:repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
+        .shell.kiosk .column header { font-size:.9375rem; padding:16px 14px 10px; }
+        .shell.kiosk .column header span { font-size:.9375rem; padding:3px 12px; }
+        .shell.kiosk article { padding:16px; }
+        .shell.kiosk article:hover { transform:none; box-shadow:var(--cc-shadow-sm); }
+        .shell.kiosk .order-head { font-size:1.125rem; }
+        .shell.kiosk .items { font-size:1rem; }
+        .shell.kiosk .subtle { font-size:.9375rem; }
+        .shell.kiosk .exception { font-size:.875rem; }
+        .shell.kiosk .empty { font-size:.9375rem; }
+        .shell.kiosk .trail, .shell.kiosk .actions { display:none; }
         .empty { padding:16px 12px; color:var(--cc-text-muted); font-size:.8125rem; text-align:center; }
         .error { margin:0; padding:12px 20px; background:var(--cc-error-bg); color:var(--cc-error); font-size:.8125rem; font-weight:600; }
       </style>
-      <div class="shell"><div class="title"><span>${escapeHtml(this.config.title)}</span><button class="secondary" id="refresh">Refresh</button></div>
+      <div class="shell${kiosk ? " kiosk" : ""}"><div class="title"><span>${escapeHtml(this.config.title)}</span>${kiosk ? "" : `<button class="secondary" id="refresh">Refresh</button>`}</div>
       ${this.error ? `<p class="error">${escapeHtml(this.error)}</p>` : ""}<main class="board">${orderColumns}</main></div>`;
     this.shadowRoot.getElementById("refresh")?.addEventListener("click", () => { this._requested = false; this.error = null; this._load(); });
   }
@@ -212,6 +233,10 @@ function decodeEntities(value) {
 }
 function escapeHtml(value) { return decodeEntities(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
 function escapeAttribute(value) { return escapeHtml(value).replace(/`/g, "&#96;"); }
-customElements.define("cubecraft-production-card", CubecraftProductionCard);
-window.customCards = window.customCards || [];
-window.customCards.push({ type: "cubecraft-production-card", name: "Cubecraft Production", description: "Interactive production workboard for WooCommerce orders." });
+// The card may be loaded both as a Lovelace resource and via extra_module_url;
+// defining twice throws, so only define once.
+if (!customElements.get("cubecraft-production-card")) {
+  customElements.define("cubecraft-production-card", CubecraftProductionCard);
+  window.customCards = window.customCards || [];
+  window.customCards.push({ type: "cubecraft-production-card", name: "Cubecraft Production", description: "Production workboard for WooCommerce orders." });
+}

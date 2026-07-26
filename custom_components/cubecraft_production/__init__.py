@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -27,6 +28,8 @@ class RuntimeData:
     coordinator: ProductionCoordinator
 
 
+_LOGGER = logging.getLogger(__name__)
+
 type CubecraftConfigEntry = Any
 
 STATIC_URL = f"/{DOMAIN}"
@@ -44,8 +47,49 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         return
     www = Path(__file__).parent / "www"
     await hass.http.async_register_static_paths([StaticPathConfig(STATIC_URL, str(www), False)])
-    add_extra_js_url(hass, CARD_URL)
     hass.data[f"{DOMAIN}_frontend"] = True
+    if not await _async_register_lovelace_resource(hass):
+        # YAML-mode dashboards manage resources themselves; fall back to the
+        # frontend's extra module list and tell the user how to do it by hand.
+        add_extra_js_url(hass, CARD_URL)
+        _LOGGER.warning(
+            "Could not add the workboard card to Lovelace resources automatically. "
+            "If the card shows 'Custom element doesn't exist', add %s as a "
+            "JavaScript Module resource (Settings > Dashboards > Resources).",
+            CARD_URL,
+        )
+
+
+async def _async_register_lovelace_resource(hass: HomeAssistant) -> bool:
+    """Register the card as a Lovelace resource so dashboards load it.
+
+    add_extra_js_url alone proved unreliable — the module simply never got
+    requested — leaving the card undefined. Registering a real resource is what
+    a manual install would do, so do it here and keep it idempotent.
+
+    Returns False when resources cannot be managed (YAML mode, or a Lovelace
+    layout we do not recognise) so the caller can fall back.
+    """
+    try:
+        lovelace = hass.data.get("lovelace")
+        resources = getattr(lovelace, "resources", None)
+        if resources is None and isinstance(lovelace, dict):
+            resources = lovelace.get("resources")
+        # Storage-backed collections can create items; YAML ones cannot.
+        if resources is None or not hasattr(resources, "async_create_item"):
+            return False
+        if not getattr(resources, "loaded", True):
+            await resources.async_load()
+        for item in resources.async_items():
+            # Existing entries may carry a cache-busting query string.
+            if str(item.get("url", "")).split("?")[0] == CARD_URL:
+                return True
+        await resources.async_create_item({"res_type": "module", "url": CARD_URL})
+        _LOGGER.info("Registered %s as a Lovelace resource", CARD_URL)
+        return True
+    except Exception:  # noqa: BLE001 - a dashboard convenience must never break setup
+        _LOGGER.exception("Failed to register the workboard card as a Lovelace resource")
+        return False
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: CubecraftConfigEntry) -> bool:
