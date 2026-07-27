@@ -13,6 +13,11 @@ from .const import ACCEPTANCE_KEYWORDS
 _STATUS_MAX = 255
 _STATUS_KEYS = ("status", "statusSummary", "statusCategory")
 _EVENT_KEYS = ("eventType", "event", "eventCode")
+# A parcel showing any of these has necessarily been accepted already.
+POST_ACCEPTANCE_KEYWORDS = (
+    "in transit", "out for delivery", "delivered", "arrived", "departed",
+    "in possession", "forwarded", "available for pickup",
+)
 
 
 def _tracking_status(payload: Any) -> str:
@@ -44,6 +49,31 @@ def _latest_event(events: Any) -> dict[str, Any] | None:
 
 
 def _is_accepted(status: str) -> bool:
-    """True when the concise status reads as USPS acceptance."""
+    """True when a status string reads as USPS acceptance."""
     normalized = status.lower()
     return any(keyword in normalized for keyword in ACCEPTANCE_KEYWORDS)
+
+
+def _accepted(payload: Any, status: str) -> bool:
+    """True when USPS has taken possession, judged over the whole response.
+
+    Acceptance is a moment in the parcel's history, not a lasting state: USPS
+    moves the headline status on to "In Transit" and then "Delivered". Polling
+    every 30 minutes will routinely miss the acceptance window, so testing only
+    the current status would leave such orders never completing. Check the event
+    history too, and treat any status that implies the parcel is already moving
+    as proof it was accepted.
+    """
+    if _is_accepted(status):
+        return True
+    events = payload.get("trackingEvents") if isinstance(payload, dict) else None
+    if isinstance(events, list):
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            for key in _EVENT_KEYS:
+                value = event.get(key)
+                if isinstance(value, str) and _is_accepted(value):
+                    return True
+    normalized = status.lower()
+    return any(keyword in normalized for keyword in POST_ACCEPTANCE_KEYWORDS)

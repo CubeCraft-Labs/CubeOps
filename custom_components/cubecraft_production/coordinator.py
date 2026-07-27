@@ -33,7 +33,7 @@ from .const import (
 )
 from .models import Order, Shipment, utcnow
 from .store import OrderStore
-from .usps import _is_accepted, _tracking_status
+from .usps import _accepted, _tracking_status
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -299,7 +299,7 @@ class ProductionCoordinator:
                     if shipment.refunded or shipment.accepted_at or shipment.carrier.upper() != "USPS":
                         continue
                     try:
-                        status = await self._async_track_usps(shipment.tracking_number)
+                        status, accepted = await self._async_track_usps(shipment.tracking_number)
                     except (BridgeError, aiohttp.ClientError) as err:
                         _LOGGER.warning(
                             "USPS tracking lookup failed for %s on order %s: %s",
@@ -308,7 +308,7 @@ class ProductionCoordinator:
                         order.exception = f"USPS tracking unavailable: {err}"
                         continue
                     shipment.status = status
-                    if _is_accepted(status):
+                    if accepted:
                         shipment.accepted_at = utcnow()
                         order.add_note("USPS", f"USPS accepted {shipment.tracking_number}")
                         changed = True
@@ -349,7 +349,7 @@ class ProductionCoordinator:
         latest = max(_parse_date(value) for value in dates)
         return datetime.now(timezone.utc) >= latest + timedelta(hours=int(threshold))
 
-    async def _async_track_usps(self, tracking_number: str) -> str:
+    async def _async_track_usps(self, tracking_number: str) -> tuple[str, bool]:
         token = await self._async_usps_token()
         url = self.entry.options.get(CONF_USPS_TRACKING_URL, DEFAULT_USPS_TRACKING_URL).format(tracking_number=tracking_number)
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
@@ -357,7 +357,8 @@ class ProductionCoordinator:
             if response.status >= 300:
                 raise BridgeError(f"USPS HTTP {response.status}")
             payload = await response.json()
-        return _tracking_status(payload)
+        status = _tracking_status(payload)
+        return status, _accepted(payload, status)
 
     async def _async_usps_token(self) -> str:
         if self._usps_token and self._usps_token_expires > datetime.now(timezone.utc) + timedelta(minutes=1):
