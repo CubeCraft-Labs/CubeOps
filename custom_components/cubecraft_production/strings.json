@@ -10,9 +10,23 @@
           "usps_client_id": "USPS client ID",
           "usps_client_secret": "USPS client secret"
         }
+      },
+      "reconfigure": {
+        "title": "Cubecraft Production",
+        "description": "Update the connection to the Cubecraft Production Bridge. Existing values are prefilled; change only what needs correcting.",
+        "data": {
+          "bridge_url": "WordPress bridge URL",
+          "shared_secret": "Bridge shared secret",
+          "usps_client_id": "USPS client ID",
+          "usps_client_secret": "USPS client secret"
+        }
       }
     },
-    "error": { "weak_secret": "Use a shared secret of at least 32 characters." }
+    "error": {
+      "weak_secret": "Use a shared secret of at least 32 characters.",
+      "already_configured": "Another Cubecraft Production entry already uses this bridge URL."
+    },
+    "abort": { "reconfigure_successful": "Cubecraft Production was updated." }
   },
   "options": {
     "step": {
